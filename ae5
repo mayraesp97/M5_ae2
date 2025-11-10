@@ -1,0 +1,194 @@
+-- ----------------------------------------------------
+-- Ejercicio Grupal: Plataforma de Alquiler de Vehículos
+-- Solución a las 10 Consultas SQL
+-- ----------------------------------------------------
+
+-- NOTA: Las consultas que involucran cálculo de fechas (como DATEDIFF) pueden variar
+-- ligeramente en sintaxis según el dialecto de SQL (MySQL, PostgreSQL, SQL Server).
+-- Estas consultas asumen una sintaxis común (ej. MySQL).
+
+-- Para DATEDIFF en SQL Server, el formato es DATEDIFF(day, fecha_inicio, fecha_fin).
+-- Para DATEDIFF en MySQL, el formato es DATEDIFF(fecha_fin, fecha_inicio).
+-- Para PostgreSQL, simplemente se restan (fecha_fin - fecha_inicio).
+
+-- ----------------------------------------------------
+
+/*
+Consulta 1: Mostrar el nombre, telefono y email de todos los clientes
+que tienen un alquiler activo (fecha actual entre fecha_inicio y fecha_fin).
+*/
+-- (Usamos CURRENT_DATE para obtener la fecha actual)
+SELECT
+    C.nombre,
+    C.telefono,
+    C.email
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+WHERE CURRENT_DATE BETWEEN A.fecha_inicio AND A.fecha_fin;
+
+-- ----------------------------------------------------
+
+/*
+Consulta 2: Mostrar los vehículos que se alquilaron en el mes de marzo de 2025.
+Debe mostrar el modelo, marca, y precio_dia de esos vehículos.
+*/
+-- (Usamos DISTINCT para evitar duplicados si un vehículo se alquiló varias veces en el mes)
+SELECT DISTINCT
+    V.marca,
+    V.modelo,
+    V.precio_dia
+FROM Vehículos V
+JOIN Alquileres A ON V.id_vehiculo = A.id_vehiculo
+WHERE A.fecha_inicio >= '2025-03-01' AND A.fecha_inicio <= '2025-03-31';
+-- Alternativa usando funciones de fecha (depende del dialecto):
+-- WHERE YEAR(A.fecha_inicio) = 2025 AND MONTH(A.fecha_inicio) = 3;
+
+-- ----------------------------------------------------
+
+/*
+Consulta 3: Calcular el precio total del alquiler para cada cliente,
+considerando el número de días (precio_dia * cantidad de días).
+*/
+-- (Asumiendo sintaxis MySQL DATEDIFF(fin, inicio). Si los días de inicio y fin
+-- se cuentan completos, podría ser DATEDIFF(...) + 1)
+SELECT
+    C.nombre,
+    SUM(DATEDIFF(A.fecha_fin, A.fecha_inicio) * V.precio_dia) AS precio_total_calculado
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+JOIN Vehículos V ON A.id_vehiculo = V.id_vehiculo
+GROUP BY C.id_cliente, C.nombre;
+
+-- ----------------------------------------------------
+
+/*
+Consulta 4: Encontrar los clientes que no han realizado ningún pago
+(no tienen registros en la tabla Pagos). Muestra su nombre y email.
+*/
+-- (Usamos NOT EXISTS, que suele ser eficiente. Esto encontrará clientes que,
+-- aunque tengan alquileres, no tienen ningún pago asociado a esos alquileres)
+SELECT
+    C.nombre,
+    C.email
+FROM Clientes C
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM Alquileres A
+    JOIN Pagos P ON A.id_alquiler = P.id_alquiler
+    WHERE A.id_cliente = C.id_cliente
+);
+
+-- ----------------------------------------------------
+
+/*
+Consulta 5: Calcular el promedio de los pagos realizados por cada cliente.
+Muestra el nombre del cliente y el promedio de pago.
+*/
+SELECT
+    C.nombre,
+    AVG(P.monto) AS promedio_pago
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+JOIN Pagos P ON A.id_alquiler = P.id_alquiler
+GROUP BY C.id_cliente, C.nombre;
+
+-- ----------------------------------------------------
+
+/*
+Consulta 6: Mostrar los vehículos que están disponibles para alquilar en una
+fecha específica (por ejemplo, 2025-03-18).
+*/
+-- (Buscamos vehículos que NO estén en la lista de vehículos alquilados en esa fecha)
+SELECT
+    V.marca,
+    V.modelo,
+    V.precio_dia
+FROM Vehículos V
+WHERE V.id_vehiculo NOT IN (
+    SELECT A.id_vehiculo
+    FROM Alquileres A
+    WHERE '2025-03-18' BETWEEN A.fecha_inicio AND A.fecha_fin
+);
+
+-- ----------------------------------------------------
+
+/*
+Consulta 7: Encontrar la marca y el modelo de los vehículos que se
+alquilaron más de una vez en el mes de marzo de 2025.
+*/
+SELECT
+    V.marca,
+    V.modelo
+FROM Vehículos V
+JOIN Alquileres A ON V.id_vehiculo = A.id_vehiculo
+WHERE A.fecha_inicio >= '2025-03-01' AND A.fecha_inicio <= '2025-03-31'
+GROUP BY V.id_vehiculo, V.marca, V.modelo
+HAVING COUNT(A.id_alquiler) > 1;
+
+-- ----------------------------------------------------
+
+/*
+Consulta 8: Mostrar el total de monto pagado por cada cliente.
+Debe mostrar el nombre del cliente y la cantidad total de pagos (suma del monto).
+*/
+SELECT
+    C.nombre,
+    SUM(P.monto) AS total_pagado
+FROM Clientes C
+LEFT JOIN Alquileres A ON C.id_cliente = A.id_cliente
+LEFT JOIN Pagos P ON A.id_alquiler = P.id_alquiler
+GROUP BY C.id_cliente, C.nombre;
+-- (Nota: Usar LEFT JOINs aquí asegura que si un cliente existe
+-- pero no tiene alquileres o pagos, aparezca con 0 o NULL.
+-- Dado que la consulta 4 busca clientes sin pagos, para la 8
+-- podríamos usar INNER JOIN si solo queremos clientes que SÍ pagaron.)
+-- Versión solo para clientes que pagaron:
+/*
+SELECT
+    C.nombre,
+    SUM(P.monto) AS total_pagado
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+JOIN Pagos P ON A.id_alquiler = P.id_alquiler
+GROUP BY C.id_cliente, C.nombre;
+*/
+
+-- ----------------------------------------------------
+
+/*
+Consulta 9: Mostrar los clientes que alquilaron el vehículo Ford Focus
+(con id_vehiculo = 3). Debe mostrar el nombre del cliente y la fecha del alquiler.
+*/
+SELECT
+    C.nombre,
+    A.fecha_inicio AS fecha_alquiler
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+WHERE A.id_vehiculo = 3;
+-- Alternativa (si no supiéramos el ID):
+/*
+SELECT
+    C.nombre,
+    A.fecha_inicio AS fecha_alquiler
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+JOIN Vehículos V ON A.id_vehiculo = V.id_vehiculo
+WHERE V.marca = 'Ford' AND V.modelo = 'Focus';
+*/
+
+-- ----------------------------------------------------
+
+/*
+Consulta 10: Realizar una consulta que muestre el nombre del cliente y el
+total de días alquilados de cada cliente, ordenado de mayor a menor.
+*/
+-- (Nuevamente, usando sintaxis DATEDIFF de MySQL)
+SELECT
+    C.nombre,
+    SUM(DATEDIFF(A.fecha_fin, A.fecha_inicio)) AS total_dias_alquilados
+FROM Clientes C
+JOIN Alquileres A ON C.id_cliente = A.id_cliente
+GROUP BY C.id_cliente, C.nombre
+ORDER BY total_dias_alquilados DESC;
+
+-- ----------------------------------------------------
